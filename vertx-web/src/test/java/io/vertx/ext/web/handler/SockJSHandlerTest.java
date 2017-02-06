@@ -23,6 +23,7 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.WebTestBase;
 import io.vertx.ext.web.handler.sockjs.SockJSHandler;
+import io.vertx.ext.web.handler.sockjs.SockJSHandlerOptions;
 import io.vertx.test.core.TestUtils;
 import org.junit.Test;
 
@@ -89,11 +90,36 @@ public class SockJSHandlerTest extends WebTestBase {
       ws.writeFrame(io.vertx.core.http.WebSocketFrame.binaryFrame(buffer1, false));
       ws.writeFrame(io.vertx.core.http.WebSocketFrame.continuationFrame(buffer2, true));
 
-      Buffer received=  Buffer.buffer();
+      Buffer received = Buffer.buffer();
 
       ws.handler(buff -> {
         received.appendBuffer(buff);
         if (received.length() == size * 2) {
+          testComplete();
+        }
+      });
+
+    });
+
+    await();
+  }
+
+  @Test
+  public void testSendWebsocketGiantReply() {
+    final Buffer fixedBuffer = TestUtils.randomBuffer(100000);
+
+    router.route("/echo2/*").handler(SockJSHandler.create(vertx,
+            new SockJSHandlerOptions().setMaxBytesStreaming(4096)).socketHandler(sock -> sock.handler(buffer -> sock.write(fixedBuffer))));
+    // Use raw websocket transport
+    client.websocket("/echo2/websocket", ws -> {
+      Buffer request = Buffer.buffer("test");
+      ws.writeFrame(io.vertx.core.http.WebSocketFrame.binaryFrame(request, true));
+
+      Buffer clientBuffer = Buffer.buffer(100000);
+      ws.handler(buff -> {
+        log.info(String.format("Received buffer of size %s", buff.length()));
+        clientBuffer.appendBuffer(buff);
+        if (clientBuffer.equals(fixedBuffer)) {
           testComplete();
         }
       });

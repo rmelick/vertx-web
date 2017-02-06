@@ -82,7 +82,7 @@ class RawWebSocketTransport {
     }
 
     public SockJSSocket write(Buffer data) {
-      ws.write(data);
+      ws.writeBinaryMessage(data);
       return this;
     }
 

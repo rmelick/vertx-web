@@ -34,6 +34,7 @@ package io.vertx.ext.web.handler.sockjs.impl;
 
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.ServerWebSocket;
 import io.vertx.core.http.WebSocketFrame;
@@ -122,7 +123,7 @@ class WebSocketTransport extends BaseTransport {
     public void sendFrame(final String body) {
       if (log.isTraceEnabled()) log.trace("WS, sending frame");
       if (!closed) {
-        ws.writeFrame(WebSocketFrame.textFrame(body, true));
+        ws.writeBinaryMessage(Buffer.buffer(body));
       }
     }
 
