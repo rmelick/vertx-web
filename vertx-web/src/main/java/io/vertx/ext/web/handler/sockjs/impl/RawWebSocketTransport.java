@@ -67,7 +67,7 @@ class RawWebSocketTransport {
     }
 
     public SockJSSocket handler(Handler<Buffer> handler) {
-      ws.handler(handler);
+      ws.binaryMessageHandler(handler);
       return this;
     }
 
