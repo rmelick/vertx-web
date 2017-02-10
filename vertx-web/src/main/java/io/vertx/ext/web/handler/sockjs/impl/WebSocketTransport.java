@@ -93,20 +93,19 @@ class WebSocketTransport extends BaseTransport {
     WebSocketListener(ServerWebSocket ws, SockJSSession session) {
       this.ws = ws;
       this.session = session;
-      Handler<String> textMessageHandler = msgs -> {
+      ws.textMessageHandler(msgs -> {
         if (!session.isClosed()) {
           if (msgs.equals("")) {
             //Ignore empty frames
           } else if ((msgs.startsWith("[\"") && msgs.endsWith("\"]")) ||
-            (msgs.startsWith("\"") && msgs.endsWith("\""))) {
+                     (msgs.startsWith("\"") && msgs.endsWith("\""))) {
             session.handleMessages(msgs);
           } else {
             //Invalid JSON - we close the connection
             close();
           }
         }
-      };
-      ws.textMessageHandler(textMessageHandler);
+      });
       ws.closeHandler(v -> {
         closed = true;
         session.shutdown();

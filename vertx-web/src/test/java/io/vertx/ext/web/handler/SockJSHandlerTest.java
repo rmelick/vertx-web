@@ -16,6 +16,7 @@
 
 package io.vertx.ext.web.handler;
 
+import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.CaseInsensitiveHeaders;
@@ -104,24 +105,69 @@ public class SockJSHandlerTest extends WebTestBase {
     await();
   }
 
+  /**
+   * {@link io.vertx.ext.web.handler.sockjs.SockJSSocket#write(Buffer)} should be able to handle large buffers by
+   * splitting them into multiple frames
+   */
   @Test
-  public void testSendWebsocketGiantReply() {
-    final Buffer fixedBuffer = TestUtils.randomBuffer(100000);
+  public void testWriteContinuationFrames() {
+    final Buffer fixedReplyBuffer = TestUtils.randomBuffer(100_000);
 
     router.route("/echo2/*").handler(SockJSHandler.create(vertx,
-            new SockJSHandlerOptions().setMaxBytesStreaming(4096)).socketHandler(sock -> sock.handler(buffer -> sock.write(fixedBuffer))));
+            new SockJSHandlerOptions().setMaxBytesStreaming(4096)).socketHandler(sock -> sock.handler(buffer -> sock.write(fixedReplyBuffer))));
     // Use raw websocket transport
     client.websocket("/echo2/websocket", ws -> {
       Buffer request = Buffer.buffer("test");
-      ws.writeFrame(io.vertx.core.http.WebSocketFrame.binaryFrame(request, true));
+      ws.writeBinaryMessage(request);
 
-      Buffer clientBuffer = Buffer.buffer(100000);
+      Buffer clientBuffer = Buffer.buffer(fixedReplyBuffer.length());
       ws.handler(buff -> {
         log.info(String.format("Received buffer of size %s", buff.length()));
         clientBuffer.appendBuffer(buff);
-        if (clientBuffer.equals(fixedBuffer)) {
+        if (clientBuffer.equals(fixedReplyBuffer)) {
           testComplete();
         }
+      });
+
+    });
+
+    await();
+  }
+
+  /**
+   * {@link io.vertx.ext.web.handler.sockjs.SockJSSocket#handler(Handler)} should combine websocket frames before
+   * delivering it to user code
+   */
+  @Test
+  public void testReadContinuationFrames() {
+    final Buffer fixedReplyBuffer = Buffer.buffer("reply");
+
+    int size = 65535;
+    Buffer requestBuffer1 = TestUtils.randomBuffer(size);
+    Buffer requestBuffer2 = TestUtils.randomBuffer(size);
+    Buffer requestBuffer3 = TestUtils.randomBuffer(size);
+    Buffer mergedRequestBuffer = Buffer.buffer()
+      .appendBuffer(requestBuffer1)
+      .appendBuffer(requestBuffer2)
+      .appendBuffer(requestBuffer3);
+
+    router.route("/echo2/*").handler(SockJSHandler.create(vertx,
+      new SockJSHandlerOptions().setMaxBytesStreaming(4096)).socketHandler(sock -> sock.handler(buffer -> {
+        assertEquals("Multiple client frames should have been combined into a single server message",
+          mergedRequestBuffer, buffer);
+        sock.write(fixedReplyBuffer);
+    })));
+
+    // Use raw websocket transport
+    client.websocket("/echo2/websocket", ws -> {
+
+      ws.writeFrame(io.vertx.core.http.WebSocketFrame.binaryFrame(requestBuffer1, false));
+      ws.writeFrame(io.vertx.core.http.WebSocketFrame.continuationFrame(requestBuffer2, false));
+      ws.writeFrame(io.vertx.core.http.WebSocketFrame.continuationFrame(requestBuffer3, true));
+
+      ws.handler(buff -> {
+        assertEquals("Incorrect reply received", fixedReplyBuffer, buff);
+        testComplete();
       });
 
     });
